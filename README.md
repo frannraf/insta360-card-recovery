@@ -114,3 +114,7 @@ troubleshooting.
   recovered LRV (the LRV is the reference picture).
 * Tested on Insta360 X5 files. Other Insta360 models use the same container
   and should work; other cameras need their own layout rules.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
