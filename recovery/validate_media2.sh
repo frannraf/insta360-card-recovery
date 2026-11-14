@@ -15,9 +15,9 @@ na=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "
 decode() {  # decode <stream-name>: v<i> or a<i>, frame CRCs to <s>.crc
   local s=$1 t=${1:0:1} i=${1:1}
   if [ "$t" = v ]; then
-    ffmpeg -nostdin -hide_banner -v error -threads 4 -thread_type frame -err_detect +crccheck+bitstream+buffer -i "$f" -map 0:v:$i -f framecrc "$out/$s.crc" 2> "$out/decode-$s.log"
+    ffmpeg -nostdin -hide_banner -v error -threads 4 -thread_type frame -err_detect +crccheck+bitstream+buffer -i "$f" -map 0:v:$i -f framecrc -y "$out/$s.crc" 2> "$out/decode-$s.log"
   else
-    ffmpeg -nostdin -hide_banner -v error -err_detect +crccheck+bitstream+buffer -i "$f" -map 0:a:$i -f framecrc "$out/$s.crc" 2> "$out/decode-$s.log"
+    ffmpeg -nostdin -hide_banner -v error -err_detect +crccheck+bitstream+buffer -i "$f" -map 0:a:$i -f framecrc -y "$out/$s.crc" 2> "$out/decode-$s.log"
   fi
 }
 pids=(); names=()
