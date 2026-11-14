@@ -1,0 +1,9 @@
+{
+  "work": "work",
+  "outputs": "outputs/recovered",
+  "images": {
+    "card1": "D:/card-images/card1.rdr"
+  },
+  "utc_offset": {"card1": 0},
+  "flush_cache": true
+}

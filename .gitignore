@@ -1,0 +1,11 @@
+# local configuration and all recovery data stay out of the repository
+recovery.json
+work/
+outputs/
+__pycache__/
+*.pyc
+*.rdr
+*.img
+*.insv
+*.lrv
+*.mp4
