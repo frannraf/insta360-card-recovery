@@ -29,6 +29,9 @@ def main() -> int:
     ap.add_argument("chain", type=Path)
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--allow-blind", action="store_true")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="write zeros for clusters recorded as missing (patched files only; "
+                         "such a file can never pass the publication gates)")
     ap.add_argument("--tail-chain", type=Path, default=None,
                     help="optional JSON list of raw chunks to use for the moov+inst tail")
     args = ap.parse_args()
@@ -40,6 +43,9 @@ def main() -> int:
         raise SystemExit("chain incomplete")
     if [m["k"] for m in mapping] != list(range(chain["nclusters"])):
         raise SystemExit("chain has holes")
+    missing = [m for m in mapping if m.get("chunk") is None]
+    if missing and not args.allow_missing:
+        raise SystemExit(f"{len(missing)} missing clusters; refusing without --allow-missing")
     blind = [m for m in mapping if m["how"].startswith("blind")]
     if blind and not args.allow_blind:
         raise SystemExit(f"{len(blind)} blind clusters; refusing without --allow-blind")
@@ -78,7 +84,7 @@ def main() -> int:
     written = 0
     with open(out, "xb") as fh:
         for m in mapping:
-            data = raw.read_chunk(m["chunk"])
+            data = bytes(CS) if m.get("chunk") is None else raw.read_chunk(m["chunk"])
             take = min(CS, mdat_end - m["k"] * CS)
             block = data[:take]
             fh.write(block)

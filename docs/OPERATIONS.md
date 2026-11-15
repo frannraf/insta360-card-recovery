@@ -93,3 +93,27 @@ A `.wslconfig` with more `memory=` also helps.
 | `deliver.py`, `deliver_batch.py` | gated publishing + manifest |
 | `rebuild_inst.py`, `finalize_inst.py`, `inst_publish.py`, `set_local_time.py` | trailers and names |
 | `rdr_reader.py`, `mp4_tables.py` | image reader and MP4 table parser |
+| `probe_parallel.py` | `probe_lost.py` over several processes (card-wide searches) |
+| `probe_anchor.py`, `find_reentry.py`, `patch_walk.py` | patching a file whose start was overwritten (below) |
+
+## Patched files (start of a file overwritten)
+
+When the card-wide search shows the clusters right after a file's header no longer exist (every
+candidate for cluster 1 fails decode confirmation), the file cannot be recovered byte-exact. It can
+still be **patched**. Patched files never go into `recovered/` or its manifest.
+
+1. `find_reentry.py <chains> <label> <lo> <hi> <k>...`: for later clusters that hold a sample start,
+   test every free chunk using only the moov's sample-start anchors (no NAL state carried across the
+   gap), then follow each hit forward. A re-entry point needs at least 40 bits.
+2. `patch_walk.py <chains> <label> <reenter_k> <reenter_chunk> --strict`: records the missing clusters
+   as `missing-zero` and walks on from the re-entry with the normal walker. Writes
+   `work/chains/<chains>-patched/<label>.json`.
+3. `assemble_chain.py <that json> --out <somewhere outside assembled/> --allow-missing`: zeros for the
+   missing clusters. Without the flag the assembler refuses.
+4. `rebuild_inst.py <label> --chains <set> --zero-missing`: the trailer, with unrecoverable slots
+   zero-filled. It writes `<label>.patched.inst.bin` / `<label>.patched-plan.json`, never the
+   verified `<label>.inst.bin`, so `finalize_inst.py` cannot install it by accident. For `--chains`,
+   use a set holding the verified chains plus the patched chain with its `missing-zero` entries dropped.
+5. Validate as usual. Expect decode errors and a smeared picture up to the first keyframe after the
+   gap. Inspect the frames around that keyframe. Then put the file in a separate folder with a
+   README that states exactly what is missing.

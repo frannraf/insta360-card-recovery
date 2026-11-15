@@ -5,7 +5,7 @@ The partial chain's clusters k=0..n-1 are known; each candidate chunk is
 appended as cluster n, every complete NAL of the frame(s) touching cluster n
 is decoded (from the GOP's keyframe), and the result is compared with the
 companion LRV frame in 16x16 blocks.  Score = blocks matching the LRV
-(PSNR >= 28 dB) minus the baseline decoded without the candidate: a right
+(PSNR >= 28 dB) minus the same decode with a random chunk instead: a right
 chunk adds picture that matches the LRV, a wrong one adds garbage.
 Saves a PNG per candidate.  Read-only on the RDR; writes only under
 work/trials/lost-<label>/.
@@ -116,13 +116,13 @@ def main() -> int:
                        capture_output=True)
         return max(good_blocks(f, r_) for r_ in refs), r
 
-    base, r = run(known, "base")
-    if base is None:
-        # nothing of this frame/lens is decodable without cluster n (it starts
-        # a new lens or frame): score a deterministic random chunk instead, so
-        # gains are measured against a known-wrong candidate
-        import random
-        base, r = run(known + random.Random(0).randbytes(CS), "base-random")
+    # Baseline = the same data with a deterministic random chunk as cluster n:
+    # it decodes the same frames as any candidate does, so the comparison is
+    # always like for like (a candidate that completes the first slice of a
+    # new frame is not compared with the previous, finished frame), and it
+    # scores like a known-wrong candidate.
+    import random
+    base, r = run(known + random.Random(0).randbytes(CS), "base-random")
     print(json.dumps({"label": label, "cluster": n, "track": ti, "frame": s, "gop_start": g0,
                       "lrv_frame": lf, "baseline_good_blocks": base, "baseline_decode": r}), flush=True)
     for c in cands:

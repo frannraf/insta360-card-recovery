@@ -45,6 +45,70 @@ def forced_of(cdir: Path, label: str) -> dict[int, int]:
     return {m["k"]: m["chunk"] for m in mp if m["how"] == "decode-verified"}
 
 
+def lookahead(cdir: Path, label: str, k: int, cands: list[int], max_gap: int = 6, steps: int = 16,
+              need_bits: float = 40.0) -> list[tuple[int, float, int]]:
+    """Structural check for a candidate whose decode adds nothing yet (its
+    slice ends in a later cluster): follow it forward the way the walker does,
+    but let each next cluster sit up to max_gap chunks further on (the camera
+    writes trailer records between video clusters at the start of a
+    recording).  Only independent evidence counts (sample starts from the
+    tables, exact landings on sample ends).  Returns (chunk, bits, clusters)."""
+    sys.path.insert(0, str(SCRIPTS))
+    import chain_walk as cw
+    from rdr_reader import RdrObject
+    own = set()
+    for q in cdir.glob("*.json"):
+        if q.name.endswith(".partial.json") or ".pre-" in q.name:
+            continue
+        for m in json.loads(q.read_text())["mapping"]:
+            if m["how"] not in cw.UNRESOLVED:
+                own.add(m["chunk"])
+    part = json.loads((cdir / f"{label}.partial.json").read_text())
+    raw = RdrObject(part["image"])
+    model = cw.FileModel(part["spec"], raw)
+    pending, kk = [], 0
+    for m in sorted(part["mapping"], key=lambda m: m["k"]):
+        if m["k"] != kk:
+            break
+        _ok, _ch, _ex, pending, _b = cw.check_cluster(model, kk, raw.read_chunk(m["chunk"]), pending)
+        own.add(m["chunk"])
+        kk += 1
+    if kk != k:
+        return []
+    out = []
+    for h in cands:
+        ok, ch, _ex, pend, bits = cw.check_cluster(model, k, raw.read_chunk(h), pending)
+        if not ok or ch == 0:
+            out.append((h, 0.0, 0))
+            continue
+        total, prev, n, used = bits, h, k + 1, {h}
+        while n < min(k + 1 + steps, model.nclusters - 1) and total < need_bits:
+            if cw.cluster_is_blind(model, n, pend):
+                c = prev + 1
+                while c in own or c in used:
+                    c += 1
+                if c - prev > max_gap:
+                    break
+                prev, n = c, n + 1
+                used.add(c)
+                continue
+            found = None
+            for c in range(prev + 1, prev + 1 + max_gap):
+                if c in own or c in used:
+                    continue
+                ok2, ch2, _ex2, pend2, b2 = cw.check_cluster(model, n, raw.read_chunk(c), pend, count_carried=False)
+                if ok2 and ch2 > 0:
+                    found = (c, pend2, b2)
+                    break
+            if not found:
+                break
+            prev, pend, n = found[0], found[1], n + 1
+            total += found[2]
+            used.add(prev)
+        out.append((h, round(total, 1), n - k))
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("chain_dir")
@@ -90,8 +154,19 @@ def main() -> int:
             scored = sorted((r for r in rows[1:] if r.get("gain") is not None), key=lambda r: -r["gain"])
             cleanly = [r for r in scored if r["decode"][1:] == ["0"]]
             print(f"[step {step}] decode gains:", [(r["chunk"], r["gain"], r["decode"][-1]) for r in scored], flush=True)
-            if not cleanly or cleanly[0]["gain"] < MIN_GAIN or (
-                    len(cleanly) > 1 and cleanly[1]["gain"] * 3 > cleanly[0]["gain"]):
+            decisive = bool(cleanly) and cleanly[0]["gain"] >= MIN_GAIN and (
+                len(cleanly) == 1 or cleanly[1]["gain"] * 3 <= cleanly[0]["gain"])
+            if not decisive:
+                # the decode cannot tell (e.g. the slice ends in a later
+                # cluster): decide by structure, with the walker's 40-bit bar
+                pool = [r["chunk"] for r in cleanly] or [h[0] for h in free]
+                la = lookahead(cdir, a.label, pk, pool)
+                print(f"[step {step}] lookahead (chunk, bits, clusters):", la, flush=True)
+                strong = [x for x in la if x[1] >= 40.0]
+                if len(strong) == 1:
+                    forced[pk] = strong[0][0]
+                    continue
+            if not decisive:
                 print("no clear winner; stopping", flush=True)
                 return 2
             forced[pk] = cleanly[0]["chunk"]

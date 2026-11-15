@@ -144,6 +144,9 @@ def main() -> int:
     ap.add_argument("--image", required=True)
     ap.add_argument("--after", type=int, default=400, help="chunks searched past the moov")
     ap.add_argument("--chains", default=None, help="chain directory name under work/chains")
+    ap.add_argument("--zero-missing", action="store_true",
+                    help="PATCHED files only: zero-fill unrecoverable slots; writes <label>.patched.inst.bin and "
+                         "<label>.patched-plan.json, never the verified <label>.inst.bin")
     args = ap.parse_args()
 
     cat = json.loads((WORK / "scan-analysis" / f"{args.image}-full-catalog.json").read_text())["files"]
@@ -339,11 +342,12 @@ def main() -> int:
         "assign": {str(s - fc0): v for s, v in sorted(assign.items())}, "missing": [s - fc0 for s in missing]})
 
     # 3) build bytes + checks
-    if not missing:
+    if not missing or args.zero_missing:
         tail_first = raw.read(f["moov_start"] + f["moov_size"], CS - (inst_start % CS)) if inst_start % CS else b""
         buf = bytearray(tail_first)
         for s in slots:
-            buf += data[assign[s]["chunk"]]
+            c = assign.get(s, {}).get("chunk")
+            buf += data[c] if c is not None else bytes(CS)
         buf += fd[:end]
         if len(buf) != f["inst_size"]:
             plan["status"] = f"size-mismatch {len(buf)} vs {f['inst_size']}"
@@ -392,11 +396,17 @@ def main() -> int:
             plan["inst_header_ok"] = bytes(buf[4:8]) == b"inst" and struct.unpack_from(">I", buf, 0)[0] == f["inst_size"]
             plan["status"] = "complete" if all(checks) and plan["inst_header_ok"] and all(
                 v.get("non_monotonic_steps", 0) == 0 for v in ts.values()) else "complete-with-warnings"
-            (out_dir / f"{args.label}.inst.bin").write_bytes(bytes(buf))
+            if missing:
+                plan["status"] = f"patched-zero-filled ({plan['status']})"
+                plan["zero_filled_slots"] = [s - fc0 for s in missing]
+                (out_dir / f"{args.label}.patched.inst.bin").write_bytes(bytes(buf))
+            else:
+                (out_dir / f"{args.label}.inst.bin").write_bytes(bytes(buf))
             plan["inst_sha256"] = hashlib.sha256(buf).hexdigest().upper()
     else:
         plan["status"] = "incomplete"
-    (out_dir / f"{args.label}.plan.json").write_text(json.dumps(plan, indent=1))
+    pname = f"{args.label}.patched-plan.json" if args.zero_missing and missing else f"{args.label}.plan.json"
+    (out_dir / pname).write_text(json.dumps(plan, indent=1))
     print(json.dumps({k: plan[k] for k in ("label", "status", "finals", "missing", "report")
                       if k in plan}))
     for k in ("record_headers_ok", "inst_header_ok", "timeseries_checks"):

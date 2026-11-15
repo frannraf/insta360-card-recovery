@@ -63,7 +63,7 @@ def main() -> int:
         if r[0] and r[1] > 0 and r[4] >= args.min_bits:
             hits.append((c, round(r[4], 1), r[1], r[2], own.get(c, "free")))
     hits.sort(key=lambda h: -h[1])
-    for h in hits[:30]:
+    for h in hits:
         print(h)
     print("hits", len(hits))
     return 0

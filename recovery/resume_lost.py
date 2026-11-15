@@ -73,7 +73,21 @@ def main() -> int:
                 "how": "header"}]
     k = 1
     prev = spec["header_chunk"]
-    while k in forced:
+    # Keep what the partial chain already verified (walker steps keep their
+    # own "how"), in one unbroken run from k=1, then add the forced clusters
+    # that continue it.  Forced clusters win where both exist.
+    known = {m["k"]: m for m in part["mapping"] if m["how"] not in cw.UNRESOLVED and m["k"] > 0}
+    while k in forced or k in known:
+        if k not in forced:
+            m = known[k]
+            ok, ch, ex, pending, bits = cw.check_cluster(model, k, cache.get(m["chunk"]), pending)
+            if not ok:
+                break  # stale prefix: stop here and let the walk decide
+            mapping.append(dict(m))
+            excluded.add(m["chunk"])
+            prev = m["chunk"]
+            k += 1
+            continue
         c = forced[k]
         ok, ch, ex, pending, bits = cw.check_cluster(model, k, cache.get(c), pending)
         if not ok:
