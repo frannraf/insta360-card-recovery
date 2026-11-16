@@ -95,6 +95,10 @@ A `.wslconfig` with more `memory=` also helps.
 | `rdr_reader.py`, `mp4_tables.py` | image reader and MP4 table parser |
 | `probe_parallel.py` | `probe_lost.py` over several processes (card-wide searches) |
 | `probe_anchor.py`, `find_reentry.py`, `patch_walk.py` | patching a file whose start was overwritten (below) |
+| `photos/run_photos.py` | the whole photo pipeline, resumable ([PHOTOS.md](PHOTOS.md)) |
+| `photos/scan_free.py`, `photos/walk_photo.py` | photo scan of the free clusters, photo chain walker |
+| `photos/check_photo.py`, `photos/jpegmcu.c` | photo checks; bit-exact JPEG scan checker (built with gcc in bash on first use) |
+| `photos/selftest.py` | self-test with a few known-good `.insp` photos: splice detection and a synthetic card |
 
 ## Patched files (start of a file overwritten)
 
