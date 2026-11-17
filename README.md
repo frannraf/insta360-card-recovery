@@ -187,3 +187,6 @@ See [docs/METHOD.md](docs/METHOD.md) and [docs/PHOTOS.md](docs/PHOTOS.md) for ho
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+This is an independent project, not affiliated with or endorsed by Insta360. The name is used
+only to say which cameras it works with.
